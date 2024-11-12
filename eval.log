@@ -1,0 +1,33 @@
+Evaluating model on dataset sst2
+Evaluating split validation
+sst2 (validation) results: Accuracy: 0.9289
+
+Evaluating model on dataset qnli
+Evaluating split validation
+qnli (validation) results: Accuracy: 0.9132
+
+Evaluating model on dataset rte
+Evaluating split validation
+rte (validation) results: Accuracy: 0.7076
+
+Evaluating model on dataset mrpc
+Evaluating split validation
+mrpc (validation) results: Accuracy: 0.8529, F1 score: 0.8976
+
+Evaluating model on dataset qqp
+Evaluating split validation
+qqp (validation) results: Accuracy: 0.9110, F1 score: 0.8796
+
+Evaluating model on dataset cola
+Evaluating split validation
+cola (validation) results: Matthews correlation: 0.5907
+
+Evaluating model on dataset mnli
+Evaluating split validation_matched
+mnli (validation_matched) results: Accuracy: 0.8490
+Evaluating split validation_mismatched
+mnli (validation_mismatched) results: Accuracy: 0.8476
+
+Evaluating model on dataset stsb
+Evaluating split validation
+stsb (validation) results: Pearson correlation: 0.8964, Spearman correlation: 0.8920
