@@ -57,6 +57,47 @@ def low_rank_approximation(W, X, rank):
     W_approx = W @ V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @torch.diag(S_Z_k) @ V_Z_k @ torch.diag(1 / S_X) @ U_X.T
     return W_approx
 
+
+import torch
+
+
+def low_rank_approximation_attn(Q, K, Y_q, Y_k, rank):
+
+    Q_approx = low_rank_approximation(Q, Y_q, rank)
+    K_approx = low_rank_approximation(K, Y_k, rank)
+
+    #print("Q_approx", Q_approx.shape)
+    #print("K_approx", K_approx.shape)
+
+    QY = Q @ Y_q
+    KY = K @ Y_k
+
+    U_W, S_W, V_W_T = torch.linalg.svd(QY.T, full_matrices=False)
+    U_X, S_X, V_X_T = torch.linalg.svd(KY, full_matrices=False)
+
+    Z = torch.diag(S_W) @ V_W_T @ U_X @ torch.diag(S_X)
+    U_Z, S_Z, V_Z_T = torch.linalg.svd(Z, full_matrices=False)
+    U_Z_k = U_Z[:, :rank]
+    S_Z_k = S_Z[:rank]
+    V_Z_k = V_Z_T[:rank, :]
+
+    M = V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @ torch.diag(S_Z_k) @ V_Z_k @ torch.diag(1 / S_X) @ U_X.T
+
+    '''
+    Q_approx = U_W @ torch.diag(S_W) @ V_W_T @ M_approx
+    K_approx = M_approx @ U_X @ torch.diag(S_X) @ V_X_T
+
+
+
+    Y_q_inv = np.linalg.pinv(Y_q)
+    Y_k_inv = np.linalg.pinv(Y_k)
+
+    Q_approx = Q_approx @ Y_q_inv
+    K_approx = K_approx @ Y_k_inv
+    '''
+    K_approx = M @ K_approx
+    return Q_approx, K_approx
+
 def low_rank_approximation_SVD(W, X, rank):
     U_W, S_W, V_W_T = torch.linalg.svd(W, full_matrices=False)
     U_W_k = U_W[:, :rank]
