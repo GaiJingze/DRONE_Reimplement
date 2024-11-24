@@ -13,7 +13,6 @@ from transformers.models.bert.modeling_bert import (
     BertPooler
 )
 
-import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 from datasets import load_dataset
 from util import low_rank_approximation, low_rank_approximation_attn, low_rank_approximation_SVD
@@ -21,44 +20,53 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import numpy as np
+import json
 
-# Timing values for each module (BertSdpaSelfAttention, BertSelfOutput, BertIntermediate, BertOutput)
-time_attn = 117.5
-time_self_output = 34.27
-time_intermediate = 133.11
-time_output = 128.84
 n_layer = 12
-tolerant = 1.2  # Allowed total loss increase ratio
-
-
-# Minimal time for the fastest module
-minimal_time = min(time_attn, time_self_output, time_intermediate, time_output)
-multiplier = (time_attn + time_self_output + time_intermediate + time_output) / minimal_time
-
-# Base tolerance calculation
-basic_tolerance = np.exp(np.log(tolerant) / multiplier)
-
-# Tolerance values for each module
-tol_attn = np.exp(np.log(basic_tolerance ** (time_attn / minimal_time)) / n_layer)
-tol_self_output = np.exp(np.log(basic_tolerance ** (time_self_output / minimal_time)) / n_layer)
-tol_intermediate = np.exp(np.log(basic_tolerance ** (time_intermediate / minimal_time)) / n_layer)
-tol_output = np.exp(np.log(basic_tolerance ** (time_output / minimal_time)) / n_layer)
-
-#test = tol_attn * tol_self_output * tol_intermediate * tol_output
-#print("test", test ** n_layer)  #should be equal to tolerant
-
-# Tolerance mapping for different types of layers
-module_tolerance = {
-    "BertSdpaSelfAttention": tol_attn,
-    "BertSelfOutput": tol_self_output,
-    "BertIntermediate": tol_intermediate,
-    "BertOutput": tol_output,
+tolerant = 2  # loss increase ratio
+dataset_times=json.load(open('./time_ori_gpu.json','r'))
+steps={
+        BertSdpaSelfAttention:16,
+        BertSelfOutput:96,
+        BertIntermediate:96,
+        BertOutput:96
+}
+rank_max={
+        BertSdpaSelfAttention:64,
+        BertSelfOutput:384,
+        BertIntermediate:384,
+        BertOutput:384
 }
 
-# Load and move model to GPU
+def get_tolerances(dataset_name):
+    times=dataset_times[dataset_name]
+    
+    time_attn = times[BertSdpaSelfAttention.__name__]
+    time_self_output = times[BertSelfOutput.__name__]
+    time_intermediate = times[BertIntermediate.__name__]
+    time_output = times[BertOutput.__name__]
+
+    minimal_time = min(time_attn, time_self_output, time_intermediate, time_output)
+    multiplier = (time_attn + time_self_output + time_intermediate + time_output) / minimal_time
+
+    basic_tolerance = np.exp(np.log(tolerant) / multiplier)
+
+    tol_attn = np.exp(np.log(basic_tolerance ** (time_attn / minimal_time)) / n_layer)
+    tol_self_output = np.exp(np.log(basic_tolerance ** (time_self_output / minimal_time)) / n_layer)
+    tol_intermediate = np.exp(np.log(basic_tolerance ** (time_intermediate / minimal_time)) / n_layer)
+    tol_output = np.exp(np.log(basic_tolerance ** (time_output / minimal_time)) / n_layer)
+    
+    tols={
+        BertSdpaSelfAttention:tol_attn,
+        BertSelfOutput:tol_self_output,
+        BertIntermediate:tol_intermediate,
+        BertOutput:tol_output
+    }
+    return tols
+
 model = BertForSequenceClassification.from_pretrained("textattack/bert-base-uncased-SST-2", num_labels=2)
 model.to("cuda")
-
+tols=get_tolerances('sst2')
 # Load dataset and prepare dataloader
 BATCH_SIZE = 32
 dataset = load_dataset("glue", "sst2", split="validation")
@@ -71,7 +79,6 @@ dataset = dataset.map(tokenize, batched=True)
 dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'label'])
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE)
 
-# Function definitions remain the same
 def collect_activations(model, dataloader, layer):
     activations = []
     def hook_fn(module, input, output):

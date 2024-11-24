@@ -125,6 +125,7 @@ if __name__=='__main__':
         time_record={k:[] for k,v in time_record.items()}
         model_name=f'./models/{dataset_name}'
         model=AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
+        print(model)
         add_time_warp(model,BertForSequenceClassification.__name__)
         for name, module in model.named_modules():
             if isinstance(module, (BertSdpaSelfAttention,BertEmbeddings,BertPooler)):

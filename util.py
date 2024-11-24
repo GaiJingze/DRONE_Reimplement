@@ -2,7 +2,8 @@ import torch
 import evaluate
 import numpy as np
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 dataset_keys = {
     'mrpc': ('sentence1', 'sentence2'),
     'sst2': ('sentence', None),
@@ -53,50 +54,23 @@ def low_rank_approximation(W, X, rank):
     S_Z_k = S_Z[:rank]
     V_Z_k = V_Z_T[:rank, :]
 
-    # Compute W
-    W_approx = W @ V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @torch.diag(S_Z_k) @ V_Z_k @ torch.diag(1 / S_X) @ U_X.T
-    return W_approx
-
-
-import torch
-
+    # Compute U,V
+    U=W @ V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @torch.diag(torch.sqrt(S_Z_k))
+    V=torch.diag(torch.sqrt(S_Z_k)) @ V_Z_k @ torch.diag(1 / S_X) @ U_X.T
+    M_U=V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @ torch.diag(torch.sqrt(S_Z_k))
+    return U,V,M_U
 
 def low_rank_approximation_attn(Q, K, Y_q, Y_k, rank):
 
-    Q_approx = low_rank_approximation(Q, Y_q, rank)
-    K_approx = low_rank_approximation(K, Y_k, rank)
+    U_Q,V_Q,_ = low_rank_approximation(Q, Y_q, rank)
+    U_K,V_K,_ = low_rank_approximation(K, Y_k, rank)
 
-    #print("Q_approx", Q_approx.shape)
-    #print("K_approx", K_approx.shape)
-
-    QY = Q @ Y_q
+    QY_T = (Q @ Y_q).T
     KY = K @ Y_k
 
-    U_W, S_W, V_W_T = torch.linalg.svd(QY.T, full_matrices=False)
-    U_X, S_X, V_X_T = torch.linalg.svd(KY, full_matrices=False)
-
-    Z = torch.diag(S_W) @ V_W_T @ U_X @ torch.diag(S_X)
-    U_Z, S_Z, V_Z_T = torch.linalg.svd(Z, full_matrices=False)
-    U_Z_k = U_Z[:, :rank]
-    S_Z_k = S_Z[:rank]
-    V_Z_k = V_Z_T[:rank, :]
-
-    M = V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @ torch.diag(S_Z_k) @ V_Z_k @ torch.diag(1 / S_X) @ U_X.T
-
-    '''
-    Q_approx = U_W @ torch.diag(S_W) @ V_W_T @ M_approx
-    K_approx = M_approx @ U_X @ torch.diag(S_X) @ V_X_T
-
-
-
-    Y_q_inv = np.linalg.pinv(Y_q)
-    Y_k_inv = np.linalg.pinv(Y_k)
-
-    Q_approx = Q_approx @ Y_q_inv
-    K_approx = K_approx @ Y_k_inv
-    '''
-    K_approx = M @ K_approx
-    return Q_approx, K_approx
+    _,M_V,M_U=low_rank_approximation(QY_T,KY,rank)
+    
+    return U_Q,V_Q,U_K,V_K,M_U,M_V
 
 def low_rank_approximation_SVD(W, X, rank):
     U_W, S_W, V_W_T = torch.linalg.svd(W, full_matrices=False)
@@ -104,5 +78,30 @@ def low_rank_approximation_SVD(W, X, rank):
     S_W_k = S_W[:rank]
     V_W_k = V_W_T[:rank, :]
     
-    W_approx = U_W_k @ torch.diag(S_W_k) @V_W_k
-    return W_approx
+    U=U_W_k @ torch.diag(torch.sqrt(S_W_k))
+    V=torch.diag(torch.sqrt(S_W_k)) @V_W_k
+    return U,V,None
+
+if __name__=='__main__':
+    X=torch.randn((128,64),).double()@torch.randn((64,256)).double()
+    Q=torch.randn((256,128)).double()
+    K=torch.randn((256,128)).double()
+    W=torch.randn((256,128)).double()
+    rank=96
+    #test low rank approximation
+    U_prone,V_prone,_=low_rank_approximation(W,X,rank)
+    U_svd,V_svd,_=low_rank_approximation_SVD(W,X,rank)
+    y=W @ X
+    y_prone=U_prone @ V_prone @ X
+    y_svd=U_svd @ V_svd @ X
+    e_prone,e_svd=torch.mean(torch.abs(y-y_prone)),torch.mean(torch.abs(y-y_svd))
+    print(e_prone,e_svd)
+    #test attention approximation
+    U_Q,V_Q,U_K,V_K,M_U,M_V=low_rank_approximation_attn(Q,K,X,X,rank)
+    U_Q_svd,V_Q_svd,_=low_rank_approximation_SVD(Q,X,rank)
+    U_K_svd,V_K_svd,_=low_rank_approximation_SVD(K,X,rank)
+    d=(Q@X).T @ (K@X)
+    d_prone=(U_Q@V_Q@X).T @ M_U @ M_V @ (U_K@V_K@X)
+    d_svd=(U_Q_svd@V_Q_svd@X).T @ (U_K_svd@V_K_svd@X)
+    e_prone,e_svd=torch.mean(torch.abs(d-d_prone)),torch.mean(torch.abs(d-d_svd))
+    print(e_prone,e_svd)
