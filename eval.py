@@ -74,7 +74,7 @@ def evaluate_model(model, tokenizer, dataset_name):
     eval_dataset = encoded_dataset[split].with_format("torch")
     eval_dataloader = DataLoader(
         eval_dataset,
-        batch_size=1,
+        batch_size=32,
         collate_fn=DataCollatorWithPadding(tokenizer, return_tensors="pt")
     )
     
