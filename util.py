@@ -113,13 +113,13 @@ if __name__=='__main__':
     W=torch.randn((384,256)).double()
     rank=96
     #test low rank approximation
-    U_prone,V_prone,_=low_rank_approximation(W,X,rank)
+    U_drone,V_drone,_=low_rank_approximation(W,X,rank)
     U_svd,V_svd,_=low_rank_approximation_SVD(W,X,rank)
     y=W @ X
-    y_prone=U_prone @ V_prone @ X
+    y_drone=U_drone @ V_drone @ X
     y_svd=U_svd @ V_svd @ X
-    e_prone,e_svd=torch.mean(torch.abs(y-y_prone)),torch.mean(torch.abs(y-y_svd))
-    print(e_prone,e_svd)
+    e_drone,e_svd=torch.mean(torch.abs(y-y_drone)),torch.mean(torch.abs(y-y_svd))
+    print(e_drone,e_svd)
 
 
     #test attention approximation
@@ -129,7 +129,7 @@ if __name__=='__main__':
     U_Q_svd,V_Q_svd,_=low_rank_approximation_SVD(Q,X,rank)
     U_K_svd,V_K_svd,_=low_rank_approximation_SVD(K,X,rank)
     d=(Q@X).T @ (K@X)
-    d_prone=(U_Q@V_Q@X).T @ M_U.squeeze(0) @ M_V.squeeze(0) @ (U_K@V_K@X)
+    d_drone=(U_Q@V_Q@X).T @ M_U.squeeze(0) @ M_V.squeeze(0) @ (U_K@V_K@X)
     d_svd=(U_Q_svd@V_Q_svd@X).T @ (U_K_svd@V_K_svd@X)
-    e_prone,e_svd=torch.mean(torch.abs(d-d_prone)),torch.mean(torch.abs(d-d_svd))
-    print(e_prone,e_svd)
+    e_drone,e_svd=torch.mean(torch.abs(d-d_drone)),torch.mean(torch.abs(d-d_svd))
+    print(e_drone,e_svd)

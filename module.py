@@ -94,8 +94,8 @@ if __name__ == '__main__':
         y_linear = linear_layer(X)
     
     # LowRankLinear layer
-    U_prone, V_prone, _ = low_rank_approximation(W, X.T, rank)
-    low_rank_layer = LowRankLinear(U_prone.T, V_prone.T, bias)
+    U_drone, V_drone, _ = low_rank_approximation(W, X.T, rank)
+    low_rank_layer = LowRankLinear(U_drone.T, V_drone.T, bias)
     y_low_rank = low_rank_layer(X)
 
     # error

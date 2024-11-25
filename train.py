@@ -12,7 +12,7 @@ from util import device,preprocess_function,compute_metrics,dataset_keys
 import sys
 sys.stdout=open('./train.log','a',buffering=1)
 
-def train_model(model_name, dataset_name, retrain=False,method="prone"):
+def train_model(model_name, dataset_name, retrain=False,method="drone"):
     print(f"\nTraining model {model_name} on dataset {dataset_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -88,4 +88,4 @@ if __name__=='__main__':
 
     # Fine-tune and evaluate the model on each dataset
     for dataset_name in dataset_list:
-        train_model(model_name, dataset_name,retrain=True,method="prone")
+        train_model(model_name, dataset_name,retrain=True,method="drone")

@@ -295,7 +295,7 @@ def compress(model, tokenizer, dataset_name, all_compressed_ranks):
     compressed_ranks = {}
     compressed_model = overall_low_rank_approximation(model, eval_dataloader, tols, compressed_ranks)
 
-    torch.save(compressed_model, f'prone/{dataset_name}.pt')
+    torch.save(compressed_model, f'drone/{dataset_name}.pt')
 
     # Store the compressed ranks in the global dictionary under the dataset name
     all_compressed_ranks[dataset_name] = compressed_ranks

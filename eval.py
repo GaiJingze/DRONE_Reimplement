@@ -128,12 +128,12 @@ if __name__=='__main__':
         # ori model
         #model_name=f'./models/{dataset_name}'
         #model=AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
-        # prone model
-        model=torch.load(f'./prone/{dataset_name}.pt')
+        # drone model
+        model=torch.load(f'./drone/{dataset_name}.pt')
         # svd model
         # model=torch.load(f'./svd/{dataset_name}.pt')
-        # prone retrain model
-        # model=torch.load(f'./prone_retrain/{dataset_name}.pt')
+        # drone retrain model
+        # model=torch.load(f'./drone_retrain/{dataset_name}.pt')
         # svd retrain model
         # model=torch.load(f'./svd_retrain/{dataset_name}.pt')
         add_time_warp(model,BertForSequenceClassification.__name__)
