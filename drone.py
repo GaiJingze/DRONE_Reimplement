@@ -1,7 +1,7 @@
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
-from transformers import AutoModel, AutoTokenizer, BertTokenizer
+from transformers import AutoModel, AutoTokenizer, BertTokenizer,DataCollatorWithPadding,AutoModelForSequenceClassification
 
 from transformers.models.bert.modeling_bert import (
     BertForSequenceClassification,
@@ -13,14 +13,19 @@ from transformers.models.bert.modeling_bert import (
     BertPooler
 )
 from module import LowRankLinear,LowRankAttention
+from util import device,preprocess_function,dataset_keys
 from tqdm.auto import tqdm
 from datasets import load_dataset
+import evaluate
 from util import low_rank_approximation, low_rank_approximation_attn, low_rank_approximation_SVD
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import numpy as np
 import json
+#torch.backends.cuda.preferred_linalg_library("magma") 
+import sys
+sys.stdout=open('./compress.log','a',buffering=1)
 
 n_layer = 12
 tolerant = 2  # loss increase ratio
@@ -37,6 +42,12 @@ max_ranks={
         BertIntermediate:384,
         BertOutput:384
 }
+
+def get_parent_module(model, target_module):
+    for name, module in model.named_modules():
+        for child_name, child in module.named_children():
+            if child is target_module:
+                return module, child_name
 
 def get_tolerances(dataset_name):
     times=dataset_times[dataset_name]
@@ -63,21 +74,6 @@ def get_tolerances(dataset_name):
         BertOutput:tol_output
     }
     return tols
-
-model = BertForSequenceClassification.from_pretrained("textattack/bert-base-uncased-SST-2", num_labels=2)
-model.to("cuda")
-tols=get_tolerances('sst2')
-# Load dataset and prepare dataloader
-BATCH_SIZE = 32
-dataset = load_dataset("glue", "sst2", split="validation")
-tokenizer = BertTokenizer.from_pretrained("textattack/bert-base-uncased-SST-2")
-
-def tokenize(batch):
-    return tokenizer(batch['sentence'], padding='max_length', truncation=True, max_length=128)
-
-dataset = dataset.map(tokenize, batched=True)
-dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'label'])
-dataloader = DataLoader(dataset, batch_size=BATCH_SIZE)
 
 def collect_activations(model, dataloader, layer):
     activations = []
@@ -107,29 +103,31 @@ def compress_attn_layer_by_optimal_rank(model, dataloader, layer, initial_rank, 
     Q = layer.query.weight.data.clone()
     K = layer.key.weight.data.clone()
     V = layer.value.weight.data.clone()
-    bias_q = layer.query.weight.bias.clone()
-    bias_k = layer.key.weight.bias.clone()
-    bias_v = layer.value.weight.bias.clone()
+    bias_q = layer.query.bias.clone()
+    bias_k = layer.key.bias.clone()
+    bias_v = layer.value.bias.clone()
     X = collect_activations(model, dataloader, layer.query)
 
-    while rank <= max_rank:
+    parent, name = get_parent_module(model, layer)
+    original_layer = getattr(parent, name)
+
+    while True:
         
         U_Q,V_Q,U_K,V_K,M_U,M_V,U_V,V_V= low_rank_approximation_attn(Q,K,V,X,rank,bias_q=bias_q,bias_k=bias_k)
-        
-        layer.query.weight.data = Q_approx
-        layer.key.weight.data = K_approx
 
+        low_rank_layer = LowRankAttention(U_Q.T,V_Q.T,U_K.T,V_K.T,U_V.T,V_V.T,bias_q,bias_k,bias_v,M_U,M_V)
+
+        setattr(parent, name, low_rank_layer)
+        
         new_loss = evaluate_model_loss(model, dataloader)
         
         if new_loss < allowed_loss:
-            setattr(layer,"dense",LowRankLinear(U.T,V.T,layer.dense.bias.data.clone()))
             return rank
         else:
-            # Revert weights if loss tolerance is exceeded and increment the rank
-            layer.query.weight.data = original_Q
-            layer.key.weight.data = original_K
             rank += increment
-    return max_rank  # Return max_rank if loss could not be met within rank limit
+        if rank>max_rank: 
+            setattr(parent, name, original_layer)
+            return False
 
 def compress_linear_layer_by_optimal_rank(model, dataloader, layer, initial_rank, max_rank, allowed_loss, increment):
     rank = initial_rank
@@ -150,7 +148,7 @@ def compress_linear_layer_by_optimal_rank(model, dataloader, layer, initial_rank
             rank += increment
         if rank>max_rank: return False
 
-def compress_layer(model, dataloader, layer, initial_rank, max_rank, allowed_loss):
+def compress_layer(model, dataloader, layer, layer_name, initial_rank, max_rank, allowed_loss, compressed_ranks):
     if isinstance(layer, BertSdpaSelfAttention): #attention layer
         optimal_rank = compress_attn_layer_by_optimal_rank(model, dataloader, layer, initial_rank, max_rank, allowed_loss,initial_rank)
     else:
@@ -158,19 +156,23 @@ def compress_layer(model, dataloader, layer, initial_rank, max_rank, allowed_los
     
     if optimal_rank:
         print("Layer compressed with optimal rank ", optimal_rank)
+        compressed_ranks[layer_name] = optimal_rank
         return True
     else:
         print("Can not find optimal rank within the loss tolerance")
         return False
 
-def overall_low_rank_approximation(model, dataloader):
+def overall_low_rank_approximation(model, dataloader, tols, compressed_ranks):
     layer_names = [name for name, _ in model.named_modules()]
 
     original_loss = evaluate_model_loss(model, dataloader)
     allowed_loss = original_loss
        
     for layer_name in layer_names:
-        layer = dict(model.named_modules())[layer_name]
+        try:
+            layer = dict(model.named_modules())[layer_name]
+        except Exception as e:
+            continue
         if isinstance(layer, (BertSdpaSelfAttention,BertSelfOutput,BertIntermediate,BertOutput)):
             tol = tols[type(layer)]
             initial_rank = steps[type(layer)]
@@ -184,9 +186,8 @@ def overall_low_rank_approximation(model, dataloader):
         print("------------------")
         print("Layer Name:", layer_name)
         print("allowed_loss", allowed_loss)
-        result = compress_layer(model, dataloader, layer, initial_rank, max_rank, allowed_loss)
+        result = compress_layer(model, dataloader, layer, layer_name, initial_rank, max_rank, allowed_loss, compressed_ranks)
         
-        # If compression succeeded, evaluate and check for loss tolerance
         if result:
             new_loss = evaluate_model_loss(model, dataloader)
             print("Original_loss:", original_loss)
@@ -195,7 +196,6 @@ def overall_low_rank_approximation(model, dataloader):
             print("Layer not compressed")
 
     return model
-
 
 def evaluate_model_loss(model, dataloader):
     model.eval()
@@ -206,7 +206,7 @@ def evaluate_model_loss(model, dataloader):
         for batch in tqdm(dataloader, desc="Evaluating"):
             input_ids = batch['input_ids'].to(model.device)
             attention_mask = batch['attention_mask'].to(model.device)
-            labels = batch['label'].to(model.device)
+            labels = batch['labels'].to(model.device)
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             loss = outputs.loss
             total_loss += loss.item()
@@ -215,37 +215,105 @@ def evaluate_model_loss(model, dataloader):
     avg_loss = total_loss / num_batches
     return avg_loss
 
-def evaluate_model_accuracy(model, dataloader):
+def evaluate_model_accuracy(model, dataloader,dataset_name):
+    print(f"Evaluating ")
     model.eval()
-    correct_predictions = 0
-    total_predictions = 0
-
-    with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Evaluating"):
-            input_ids = batch['input_ids'].to(model.device)
-            attention_mask = batch['attention_mask'].to(model.device)
-            labels = batch['label'].to(model.device)
-
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+    predictions = []
+    labels = []
+    for batch in tqdm(dataloader):
+        batch = {k: v.to(device) for k, v in batch.items()}
+        with torch.no_grad():
+            labels_batch = batch['labels']
+            outputs = model(**batch)
             logits = outputs.logits
-            predictions = torch.argmax(logits, dim=-1)
+            if dataset_name == 'stsb':
+                # regression
+                prediction = logits.squeeze().cpu().numpy()
+                if prediction.size==1: prediction=[prediction]
+                label = labels_batch.squeeze().cpu().numpy()
+                if label.size==1: label=[label]
+            else:
+                prediction = torch.argmax(logits, dim=-1).cpu().numpy()
+                label = labels_batch.cpu().numpy()
+            predictions.extend(prediction)
+            labels.extend(label)
 
-            correct_predictions += (predictions == labels).sum().item()
-            total_predictions += labels.size(0)
+    # metrics
+    metric = evaluate.load('glue', dataset_name)
+    metric_result = metric.compute(predictions=predictions, references=labels)
+    if dataset_name == 'stsb':
+        print(f"{dataset_name} results: Pearson correlation: {metric_result['pearson']:.4f}, Spearman correlation: {metric_result['spearmanr']:.4f}")
+    elif dataset_name in ['mrpc', 'qqp']:
+        print(f"{dataset_name} results: Accuracy: {metric_result['accuracy']:.4f}, F1 score: {metric_result['f1']:.4f}")
+    elif dataset_name == 'cola':
+        print(f"{dataset_name} results: Matthews correlation: {metric_result['matthews_correlation']:.4f}")
+    else:
+        print(f"{dataset_name} results: Accuracy: {metric_result['accuracy']:.4f}")
 
-    accuracy = correct_predictions / total_predictions
-    return accuracy
+def compress(model, tokenizer, dataset_name, all_compressed_ranks):
+    tols=get_tolerances(dataset_name)
+    
+    print(f"\n Compress model on dataset {dataset_name}")
+
+    dataset = load_dataset('glue', dataset_name)
+
+    sentence1_key, sentence2_key = dataset_keys[dataset_name]
+    encoded_dataset = dataset.map(
+        lambda examples: preprocess_function(examples, tokenizer, sentence1_key, sentence2_key),
+        batched=True,
+        remove_columns=[col for col in dataset['train'].column_names],
+        num_proc=2,
+        load_from_cache_file=False
+        )
+
+    # mnli has two validation set
+    if dataset_name == 'mnli':
+        split = 'validation_matched'
+    else:
+        split = 'validation'
+    
+    eval_dataset = encoded_dataset[split].with_format("torch")
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        batch_size=32,
+        #collate_fn=DataCollatorWithPadding(tokenizer, padding=True,return_tensors="pt")
+    )
+
+    evaluate_model_accuracy(model, eval_dataloader,dataset_name)
+    
+    compressed_ranks = {}
+    compressed_model = overall_low_rank_approximation(model, eval_dataloader, tols, compressed_ranks)
+
+    torch.save(compressed_model, f'prone/{dataset_name}.pt')
+
+    # Store the compressed ranks in the global dictionary under the dataset name
+    all_compressed_ranks[dataset_name] = compressed_ranks
+
+    print(f"Evaluating compressed model")
+    
+    evaluate_model_accuracy(compressed_model, eval_dataloader,dataset_name)
+    
 
 if __name__=='__main__':
     print(torch.__version__)
     print(torch.cuda.is_available())
     print(torch.cuda.get_device_name())
-
-    acc = evaluate_model_accuracy(model, dataloader)
-    print(f"Average accuracy of the model: {acc}")
-
-    compressed_model = overall_low_rank_approximation(model, dataloader)
-    compressed_model.save_pretrained('prone')
-    acc = evaluate_model_accuracy(compressed_model, dataloader)
-    print(f"Average accuracy of the compressed model: {acc}")
-    model1=AutoModel.from_pretrained('prone')
+    # dataset_list = [
+    #     'sst2', 'qnli', 'rte', 'mrpc', 'qqp', 'cola', 'mnli', 'stsb'
+    # ]
+    dataset_list = [
+        'sst2', 'qnli', 'rte', 'mrpc', 'qqp', 'cola', 'mnli', 'stsb'
+    ]
+    tokenizer=AutoTokenizer.from_pretrained('bert-base-uncased')
+    if not os.path.exists('all_compressed_ranks.json'):
+        all_compressed_ranks = {}
+    else:
+        all_compressed_ranks=json.load(open('all_compressed_ranks.json','r'))
+    
+    for dataset_name in dataset_list:
+        if dataset_name in all_compressed_ranks.keys(): continue
+        model_name=f'./models/{dataset_name}'
+        model=AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
+        compress(model, tokenizer, dataset_name, all_compressed_ranks)
+        with open('all_compressed_ranks.json', 'w') as f:
+            json.dump(all_compressed_ranks, f, indent=4)

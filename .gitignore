@@ -1,3 +1,9 @@
 models
 results
 __pycache__
+prone
+prone_retrain
+svd
+svd_retrain
+compress.log
+train.log

@@ -13,6 +13,7 @@ from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
     BertPooler
 )
+from module import LowRankAttention
 from datasets import load_dataset
 import evaluate
 from torch.utils.data import DataLoader
@@ -131,6 +132,8 @@ if __name__=='__main__':
                 add_time_warp(module,type(module).__name__)
             elif isinstance(module, (BertSelfOutput,BertIntermediate,BertOutput)):
                 add_time_warp(module,type(module).__name__)
+            elif isinstance(module, (LowRankAttention)):
+                add_time_warp(module,BertSdpaSelfAttention.__name__)
         evaluate_model(model, tokenizer, dataset_name)
         time_record={k:np.mean(v) for k,v in time_record.items()}
         time_result[dataset_name]=time_record

@@ -54,7 +54,7 @@ class LowRankAttention(nn.Module):
         keys = keys.view(N, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(N, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attn_bias = torch.zeros(seq_length, seq_length, dtype=queries.dtype)
+        attn_bias = torch.zeros(N,1,seq_length, seq_length, dtype=queries.dtype,device=queries.device)
         if attention_mask is not None:
             if attention_mask.dtype == torch.bool:
                 attn_bias.masked_fill_(attention_mask.logical_not(), float("-inf"))

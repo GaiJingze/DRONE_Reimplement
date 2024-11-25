@@ -21,9 +21,14 @@ def preprocess_function(examples, tokenizer, sentence1_key, sentence2_key):
         texts = (examples[sentence1_key],)
     else:
         texts = (examples[sentence1_key], examples[sentence2_key])
-    # Tokenization
-    result = tokenizer(*texts, truncation=True, max_length=128)
-    # Add labels
+    
+    result = tokenizer(
+        *texts,
+        padding='max_length',   
+        truncation=True,
+        max_length=128         
+    )
+    
     result['labels'] = examples['label']
     return result
 
@@ -44,21 +49,21 @@ def compute_metrics(eval_preds, dataset_name):
 
 def low_rank_approximation(W, X, rank):
     # SVD of W & X
-    U_W, S_W, V_W_T = torch.linalg.svd(W, full_matrices=False)
-    U_X, S_X, V_X_T = torch.linalg.svd(X, full_matrices=False)
+    U_W, S_W, V_W_T = torch.linalg.svd(W.cpu(), full_matrices=False)
+    U_X, S_X, V_X_T = torch.linalg.svd(X.cpu(), full_matrices=False)
         
     # Compute Z = S_W_r V_W_r^T U_X_t S_X_t and truncate
     Z = torch.diag(S_W) @ V_W_T @ U_X @ torch.diag(S_X)
-    U_Z, S_Z, V_Z_T = torch.linalg.svd(Z, full_matrices=False)
+    U_Z, S_Z, V_Z_T = torch.linalg.svd(Z.cpu(), full_matrices=False)
     U_Z_k = U_Z[:, :rank]
     S_Z_k = S_Z[:rank]
     V_Z_k = V_Z_T[:rank, :]
 
     # Compute U,V
-    U=W @ V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @torch.diag(torch.sqrt(S_Z_k))
+    U=W.cpu() @ V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @torch.diag(torch.sqrt(S_Z_k))
     V=torch.diag(torch.sqrt(S_Z_k)) @ V_Z_k @ torch.diag(1 / S_X) @ U_X.T
     M_U=V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @ torch.diag(torch.sqrt(S_Z_k))
-    return U,V,M_U
+    return U.to(X.device),V.to(X.device),M_U.to(X.device)
 
 def low_rank_approximation_attn(Q, K, V, X, rank, head_num=12 ,bias_q=0, bias_k=0 ):
 
@@ -66,29 +71,23 @@ def low_rank_approximation_attn(Q, K, V, X, rank, head_num=12 ,bias_q=0, bias_k=
     U_K,V_K,_ = low_rank_approximation(K, X, rank*head_num)
     U_V,V_V,_ = low_rank_approximation(V, X, rank*head_num)
 
-    QY_T = (U_Q @ V_Q @ X).T+ bias_q  # 形状：[seq_len, d_model]
-    KY = ((U_K @ V_K @ X).T + bias_k).T  # 形状：[d_model, seq_len]
-    
-    
+    QY_T = (U_Q @ V_Q @ X).T+ bias_q  # [seq_len, d_model]
+    KY = ((U_K @ V_K @ X).T + bias_k).T  # [d_model, seq_len]
+        
     seq_len,d_model = QY_T.shape[-2:]
-    d_k = d_model // head_num  # 每个头的维度
+    d_k = d_model // head_num
 
     QY_T = QY_T.view(seq_len, head_num, d_k)  # [seq_len, head_num, d_k]
     KY = KY.view(head_num, d_k, seq_len)  # [head_num, d_k, seq_len]
 
     M_V_list = []
     M_U_list = []
-
-    for i in range(head_num):
-        
+    for i in range(head_num): # multi-head
         QY_T_i = QY_T[ :, i, :]  # [seq_len, d_k]
         KY_i = KY[i, :, :]  # [d_k, seq_len]
-        
         _, M_V_i, M_U_i = low_rank_approximation(QY_T_i, KY_i, rank)
-        
         M_V_list.append(M_V_i)
         M_U_list.append(M_U_i)
-
     
     M_V = torch.stack(M_V_list, dim=0)  # [batch_size, head_num, ...]
     M_U = torch.stack(M_U_list, dim=0)
