@@ -5,5 +5,4 @@ prone
 prone_retrain
 svd
 svd_retrain
-compress.log
-train.log
+*.log

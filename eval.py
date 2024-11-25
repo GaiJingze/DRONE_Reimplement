@@ -59,7 +59,8 @@ def evaluate_model(model, tokenizer, dataset_name):
         lambda examples: preprocess_function(examples, tokenizer, sentence1_key, sentence2_key),
         batched=True,
         remove_columns=[col for col in dataset['train'].column_names],
-        num_proc=2
+        num_proc=2,
+        load_from_cache_file=True
         )
 
     # mnli has two validation set
@@ -115,7 +116,7 @@ if __name__=='__main__':
     #     'sst2', 'qnli', 'rte', 'mrpc', 'qqp', 'cola', 'mnli', 'stsb'
     # ]
     dataset_list = [
-        'sst2', 'qnli', 'rte', 'mrpc', 'qqp', 'cola', 'mnli', 
+        'sst2', 'qnli', 'rte', 'mrpc', 'qqp', 'cola', 'mnli', 'stsb'
     ]
     tokenizer=AutoTokenizer.from_pretrained('bert-base-uncased')
     if not os.path.exists('./time.json'):
@@ -124,8 +125,17 @@ if __name__=='__main__':
         time_result=json.load(open('./time.json','r'))
     for dataset_name in dataset_list:
         time_record={k:[] for k,v in time_record.items()}
-        model_name=f'./models/{dataset_name}'
-        model=AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
+        # ori model
+        #model_name=f'./models/{dataset_name}'
+        #model=AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
+        # prone model
+        model=torch.load(f'./prone/{dataset_name}.pt')
+        # svd model
+        # model=torch.load(f'./svd/{dataset_name}.pt')
+        # prone retrain model
+        # model=torch.load(f'./prone_retrain/{dataset_name}.pt')
+        # svd retrain model
+        # model=torch.load(f'./svd_retrain/{dataset_name}.pt')
         add_time_warp(model,BertForSequenceClassification.__name__)
         for name, module in model.named_modules():
             if isinstance(module, (BertSdpaSelfAttention,BertEmbeddings,BertPooler)):

@@ -49,21 +49,21 @@ def compute_metrics(eval_preds, dataset_name):
 
 def low_rank_approximation(W, X, rank):
     # SVD of W & X
-    U_W, S_W, V_W_T = torch.linalg.svd(W.cpu(), full_matrices=False)
-    U_X, S_X, V_X_T = torch.linalg.svd(X.cpu(), full_matrices=False)
-        
+    U_W, S_W, V_W_T = torch.linalg.svd(W, full_matrices=False)
+    U_X, S_X, V_X_T = torch.linalg.svd(X, full_matrices=False)
+    
     # Compute Z = S_W_r V_W_r^T U_X_t S_X_t and truncate
     Z = torch.diag(S_W) @ V_W_T @ U_X @ torch.diag(S_X)
-    U_Z, S_Z, V_Z_T = torch.linalg.svd(Z.cpu(), full_matrices=False)
+    U_Z, S_Z, V_Z_T = torch.linalg.svd(Z, full_matrices=False)
     U_Z_k = U_Z[:, :rank]
     S_Z_k = S_Z[:rank]
     V_Z_k = V_Z_T[:rank, :]
 
     # Compute U,V
-    U=W.cpu() @ V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @torch.diag(torch.sqrt(S_Z_k))
+    U=W @ V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @torch.diag(torch.sqrt(S_Z_k))
     V=torch.diag(torch.sqrt(S_Z_k)) @ V_Z_k @ torch.diag(1 / S_X) @ U_X.T
     M_U=V_W_T.T @ torch.diag(1 / S_W) @ U_Z_k @ torch.diag(torch.sqrt(S_Z_k))
-    return U.to(X.device),V.to(X.device),M_U.to(X.device)
+    return U,V,M_U
 
 def low_rank_approximation_attn(Q, K, V, X, rank, head_num=12 ,bias_q=0, bias_k=0 ):
 
@@ -92,7 +92,7 @@ def low_rank_approximation_attn(Q, K, V, X, rank, head_num=12 ,bias_q=0, bias_k=
     M_V = torch.stack(M_V_list, dim=0)  # [batch_size, head_num, ...]
     M_U = torch.stack(M_U_list, dim=0)
     
-    return U_Q, V_Q, U_K, V_K, M_U, M_V,U_V,V_V
+    return U_Q, V_Q, U_K, V_K, M_U, M_V, U_V, V_V
 
 def low_rank_approximation_SVD(W, X, rank):
     U_W, S_W, V_W_T = torch.linalg.svd(W, full_matrices=False)

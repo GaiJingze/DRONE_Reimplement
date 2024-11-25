@@ -114,7 +114,8 @@ def compress_svd(model, tokenizer, dataset_name, compressed_ranks):
         lambda examples: preprocess_function(examples, tokenizer, sentence1_key, sentence2_key),
         batched=True,
         remove_columns=[col for col in dataset['train'].column_names],
-        num_proc=2
+        num_proc=2,
+        load_from_cache_file=True
     )
 
     # mnli has two validation sets

@@ -1,0 +1,281 @@
+Compress model on dataset cola
+Evaluating 
+cola results: Matthews correlation: 0.5907
+------------------
+Layer Name: bert.encoder.layer.0.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  16
+Original_loss: 0.5020360992939183
+New_loss: 0.5015213217473391
+------------------
+Layer Name: bert.encoder.layer.0.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.49613868597556243
+------------------
+Layer Name: bert.encoder.layer.0.intermediate
+allowed_loss 0.5064373140195075
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.4902632047958446
+------------------
+Layer Name: bert.encoder.layer.0.output
+allowed_loss 0.5081393370364679
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.4888516676922639
+------------------
+Layer Name: bert.encoder.layer.1.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  16
+Original_loss: 0.5020360992939183
+New_loss: 0.498351094284744
+------------------
+Layer Name: bert.encoder.layer.1.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.4896648975484299
+------------------
+Layer Name: bert.encoder.layer.1.intermediate
+allowed_loss 0.5064373140195075
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.4896442854043209
+------------------
+Layer Name: bert.encoder.layer.1.output
+allowed_loss 0.5081393370364679
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.4916282438419082
+------------------
+Layer Name: bert.encoder.layer.2.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  16
+Original_loss: 0.5020360992939183
+New_loss: 0.4995543873219779
+------------------
+Layer Name: bert.encoder.layer.2.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.5011448214451472
+------------------
+Layer Name: bert.encoder.layer.2.intermediate
+allowed_loss 0.5064373140195075
+Layer compressed with optimal rank  384
+Original_loss: 0.5020360992939183
+New_loss: 0.5011539154432036
+------------------
+Layer Name: bert.encoder.layer.2.output
+allowed_loss 0.5081393370364679
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.3.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  16
+Original_loss: 0.5020360992939183
+New_loss: 0.49640106624274544
+------------------
+Layer Name: bert.encoder.layer.3.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.5025286148443366
+------------------
+Layer Name: bert.encoder.layer.3.intermediate
+allowed_loss 0.5064373140195075
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.3.output
+allowed_loss 0.5081393370364679
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.4.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  32
+Original_loss: 0.5020360992939183
+New_loss: 0.5132992816242304
+------------------
+Layer Name: bert.encoder.layer.4.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  288
+Original_loss: 0.5020360992939183
+New_loss: 0.5076558418346174
+------------------
+Layer Name: bert.encoder.layer.4.intermediate
+allowed_loss 0.5064373140195075
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.4.output
+allowed_loss 0.5081393370364679
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.5.attention.self
+allowed_loss 0.5144269564745731
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.5.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  192
+Original_loss: 0.5020360992939183
+New_loss: 0.5030486247304714
+------------------
+Layer Name: bert.encoder.layer.5.intermediate
+allowed_loss 0.5064373140195075
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.5.output
+allowed_loss 0.5081393370364679
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.6.attention.self
+allowed_loss 0.5144269564745731
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.6.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  192
+Original_loss: 0.5020360992939183
+New_loss: 0.5002819435162977
+------------------
+Layer Name: bert.encoder.layer.6.intermediate
+allowed_loss 0.5064373140195075
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.6.output
+allowed_loss 0.5081393370364679
+Layer compressed with optimal rank  288
+Original_loss: 0.5020360992939183
+New_loss: 0.5067755968281717
+------------------
+Layer Name: bert.encoder.layer.7.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  16
+Original_loss: 0.5020360992939183
+New_loss: 0.500080065971071
+------------------
+Layer Name: bert.encoder.layer.7.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  192
+Original_loss: 0.5020360992939183
+New_loss: 0.5030338556477518
+------------------
+Layer Name: bert.encoder.layer.7.intermediate
+allowed_loss 0.5064373140195075
+Layer compressed with optimal rank  288
+Original_loss: 0.5020360992939183
+New_loss: 0.49883405220779503
+------------------
+Layer Name: bert.encoder.layer.7.output
+allowed_loss 0.5081393370364679
+Layer compressed with optimal rank  192
+Original_loss: 0.5020360992939183
+New_loss: 0.5055078931830146
+------------------
+Layer Name: bert.encoder.layer.8.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  16
+Original_loss: 0.5020360992939183
+New_loss: 0.5021008273417299
+------------------
+Layer Name: bert.encoder.layer.8.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.5037188344832623
+------------------
+Layer Name: bert.encoder.layer.8.intermediate
+allowed_loss 0.5064373140195075
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.5044799033891071
+------------------
+Layer Name: bert.encoder.layer.8.output
+allowed_loss 0.5081393370364679
+Layer compressed with optimal rank  192
+Original_loss: 0.5020360992939183
+New_loss: 0.5080292906725046
+------------------
+Layer Name: bert.encoder.layer.9.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  32
+Original_loss: 0.5020360992939183
+New_loss: 0.513128945547523
+------------------
+Layer Name: bert.encoder.layer.9.attention.output
+allowed_loss 0.5083857722175301
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.9.intermediate
+allowed_loss 0.5064373140195075
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.9.output
+allowed_loss 0.5081393370364679
+Can not find optimal rank within the loss tolerance
+Layer not compressed
+------------------
+Layer Name: bert.encoder.layer.10.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  16
+Original_loss: 0.5020360992939183
+New_loss: 0.5075366397698721
+------------------
+Layer Name: bert.encoder.layer.10.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.5071933732339831
+------------------
+Layer Name: bert.encoder.layer.10.intermediate
+allowed_loss 0.5064373140195075
+Layer compressed with optimal rank  288
+Original_loss: 0.5020360992939183
+New_loss: 0.5049576034600084
+------------------
+Layer Name: bert.encoder.layer.10.output
+allowed_loss 0.5081393370364679
+Layer compressed with optimal rank  384
+Original_loss: 0.5020360992939183
+New_loss: 0.507052828642455
+------------------
+Layer Name: bert.encoder.layer.11.attention.self
+allowed_loss 0.5144269564745731
+Layer compressed with optimal rank  16
+Original_loss: 0.5020360992939183
+New_loss: 0.5052140973734133
+------------------
+Layer Name: bert.encoder.layer.11.attention.output
+allowed_loss 0.5083857722175301
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.5072656770547231
+------------------
+Layer Name: bert.encoder.layer.11.intermediate
+allowed_loss 0.5064373140195075
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.502757315382813
+------------------
+Layer Name: bert.encoder.layer.11.output
+allowed_loss 0.5081393370364679
+Layer compressed with optimal rank  96
+Original_loss: 0.5020360992939183
+New_loss: 0.5017320967533372
+Evaluating compressed model
+Evaluating 
+cola results: Matthews correlation: 0.5178

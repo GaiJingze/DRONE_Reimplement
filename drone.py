@@ -17,7 +17,7 @@ from util import device,preprocess_function,dataset_keys
 from tqdm.auto import tqdm
 from datasets import load_dataset
 import evaluate
-from util import low_rank_approximation, low_rank_approximation_attn, low_rank_approximation_SVD
+from util import low_rank_approximation, low_rank_approximation_attn
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -122,12 +122,17 @@ def compress_attn_layer_by_optimal_rank(model, dataloader, layer, initial_rank, 
         new_loss = evaluate_model_loss(model, dataloader)
         
         if new_loss < allowed_loss:
+            del X
+            torch.cuda.empty_cache()
             return rank
         else:
             rank += increment
         if rank>max_rank: 
+            del X
+            torch.cuda.empty_cache()
             setattr(parent, name, original_layer)
             return False
+        torch.cuda.empty_cache()
 
 def compress_linear_layer_by_optimal_rank(model, dataloader, layer, initial_rank, max_rank, allowed_loss, increment):
     rank = initial_rank
@@ -141,12 +146,18 @@ def compress_linear_layer_by_optimal_rank(model, dataloader, layer, initial_rank
         new_loss = evaluate_model_loss(model, dataloader)
         
         if new_loss < allowed_loss:
+            del X
+            torch.cuda.empty_cache()
             setattr(layer,"dense",LowRankLinear(U.T,V.T,layer.dense.bias.data.clone()))
             return rank
         else:
             layer.dense.weight.data = original_weight
             rank += increment
-        if rank>max_rank: return False
+        if rank>max_rank: 
+            del X
+            torch.cuda.empty_cache()
+            return False
+        torch.cuda.empty_cache()
 
 def compress_layer(model, dataloader, layer, layer_name, initial_rank, max_rank, allowed_loss, compressed_ranks):
     if isinstance(layer, BertSdpaSelfAttention): #attention layer
@@ -263,7 +274,7 @@ def compress(model, tokenizer, dataset_name, all_compressed_ranks):
         batched=True,
         remove_columns=[col for col in dataset['train'].column_names],
         num_proc=2,
-        load_from_cache_file=False
+        load_from_cache_file=True
         )
 
     # mnli has two validation set
@@ -302,7 +313,7 @@ if __name__=='__main__':
     #     'sst2', 'qnli', 'rte', 'mrpc', 'qqp', 'cola', 'mnli', 'stsb'
     # ]
     dataset_list = [
-        'sst2', 'qnli', 'rte', 'mrpc', 'qqp', 'cola', 'mnli', 'stsb'
+        'stsb'
     ]
     tokenizer=AutoTokenizer.from_pretrained('bert-base-uncased')
     if not os.path.exists('all_compressed_ranks.json'):
