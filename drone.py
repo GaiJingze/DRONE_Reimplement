@@ -12,7 +12,7 @@ from transformers.models.bert.modeling_bert import (
     BertEmbeddings,
     BertPooler
 )
-
+from module import LowRankLinear,LowRankAttention
 from tqdm.auto import tqdm
 from datasets import load_dataset
 from util import low_rank_approximation, low_rank_approximation_attn, low_rank_approximation_SVD
@@ -31,8 +31,8 @@ steps={
         BertIntermediate:96,
         BertOutput:96
 }
-rank_max={
-        BertSdpaSelfAttention:64,
+max_ranks={
+        BertSdpaSelfAttention:32,
         BertSelfOutput:384,
         BertIntermediate:384,
         BertOutput:384
@@ -82,8 +82,8 @@ dataloader = DataLoader(dataset, batch_size=BATCH_SIZE)
 def collect_activations(model, dataloader, layer):
     activations = []
     def hook_fn(module, input, output):
-        activations.append(output.detach())
-
+        activations.append(input[0].detach())
+        
     handle = layer.register_forward_hook(hook_fn)
 
     model.eval()
@@ -101,44 +101,28 @@ def collect_activations(model, dataloader, layer):
         X = X.T
     return X
 
-
 def compress_attn_layer_by_optimal_rank(model, dataloader, layer, initial_rank, max_rank, allowed_loss, increment):
-    """
-    Find the optimal rank for Q and K in attn layer
-
-    Parameters:
-        model (nn.Module): The model being compressed.
-        dataloader (DataLoader): The data loader for the evaluation dataset.
-        layer (nn.Module): The layer to compress.
-        initial_rank (int): The initial rank to start the search.
-        max_rank (int): The maximum allowable rank.
-        allowed_loss (float): Allowed loss.
-        increment (int): Rank increment per search iteration.
-
-    Returns:
-        int: Optimal rank satisfying the loss tolerance, or max_rank if tolerance cannot be met.
-    """
-
     rank = initial_rank
 
-    original_Q = layer.query.weight.data.clone()
-    original_K = layer.key.weight.data.clone()
-
-    Y_q = collect_activations(model, dataloader, layer.query)
-    Y_k = collect_activations(model, dataloader, layer.key)
+    Q = layer.query.weight.data.clone()
+    K = layer.key.weight.data.clone()
+    V = layer.value.weight.data.clone()
+    bias_q = layer.query.weight.bias.clone()
+    bias_k = layer.key.weight.bias.clone()
+    bias_v = layer.value.weight.bias.clone()
+    X = collect_activations(model, dataloader, layer.query)
 
     while rank <= max_rank:
-        # Attempt compression with the current rank
-        Q_approx, K_approx = low_rank_approximation_attn(layer.query.weight.data, layer.key.weight.data, Y_q, Y_k, rank)
-
+        
+        U_Q,V_Q,U_K,V_K,M_U,M_V,U_V,V_V= low_rank_approximation_attn(Q,K,V,X,rank,bias_q=bias_q,bias_k=bias_k)
+        
         layer.query.weight.data = Q_approx
         layer.key.weight.data = K_approx
 
-        # Evaluate model loss after compression
         new_loss = evaluate_model_loss(model, dataloader)
-
-        # Check if new loss is within allowed range
+        
         if new_loss < allowed_loss:
+            setattr(layer,"dense",LowRankLinear(U.T,V.T,layer.dense.bias.data.clone()))
             return rank
         else:
             # Revert weights if loss tolerance is exceeded and increment the rank
@@ -147,149 +131,54 @@ def compress_attn_layer_by_optimal_rank(model, dataloader, layer, initial_rank, 
             rank += increment
     return max_rank  # Return max_rank if loss could not be met within rank limit
 
-
-
-def compress_layer_by_optimal_rank(model, dataloader, layer, initial_rank, max_rank, allowed_loss, increment):
-    """
-    Find the optimal rank by incrementally increasing it until the desired loss tolerance is met.
-    
-    Parameters:
-        model (nn.Module): The model being compressed.
-        dataloader (DataLoader): The data loader for the evaluation dataset.
-        layer (nn.Module): The layer to compress.
-        initial_rank (int): The initial rank to start the search.
-        max_rank (int): The maximum allowable rank.
-        allowed_loss (float): Allowed loss.
-        increment (int): Rank increment per search iteration.
-        
-    Returns:
-        int: Optimal rank satisfying the loss tolerance, or max_rank if tolerance cannot be met.
-    """
-
+def compress_linear_layer_by_optimal_rank(model, dataloader, layer, initial_rank, max_rank, allowed_loss, increment):
     rank = initial_rank
-
-    original_weight = layer.weight.data.clone()
+    original_weight = layer.dense.weight.data.clone()
     X = collect_activations(model, dataloader, layer)
 
-    while rank <= max_rank:
-        # Attempt compression with the current rank
-
-        W_approx = low_rank_approximation(layer.weight.data, X, rank)
-        layer.weight.data = W_approx
+    while True:
+        U,V,_ = low_rank_approximation(original_weight, X, rank)
+        layer.dense.weight.data = U@V
         
-        # Evaluate model loss after compression
         new_loss = evaluate_model_loss(model, dataloader)
         
-        # Check if new loss is within tolerance
         if new_loss < allowed_loss:
+            setattr(layer,"dense",LowRankLinear(U.T,V.T,layer.dense.bias.data.clone()))
             return rank
         else:
-            # Revert weights if loss tolerance is exceeded and increment the rank
-            layer.weight.data = original_weight
+            layer.dense.weight.data = original_weight
             rank += increment
-
-    return max_rank  # Return max_rank if tolerance could not be met within rank limit
+        if rank>max_rank: return False
 
 def compress_layer(model, dataloader, layer, initial_rank, max_rank, allowed_loss):
-    """
-    Compresses a given layer in the model by finding the optimal rank that respects the loss tolerance.
-    
-    Parameters:
-        model (nn.Module): The model being compressed.
-        dataloader (DataLoader): The data loader for the evaluation dataset.
-        layer_name (str): The name of the layer to compress.
-        initial_rank (int): Starting rank for compression.
-        max_rank (int): Max allowable rank for compression.
-        allowed_loss (float): Allowed loss for compression.
-
-    Returns:
-        nn.Module: The updated model with the specified layer compressed.
-        bool: Success flag indicating if the layer was successfully compressed.
-    """
     if isinstance(layer, BertSdpaSelfAttention): #attention layer
-        optimal_rank = compress_attn_layer_by_optimal_rank(
-            model, dataloader, layer, initial_rank, max_rank, allowed_loss,
-            increment=96
-        )
+        optimal_rank = compress_attn_layer_by_optimal_rank(model, dataloader, layer, initial_rank, max_rank, allowed_loss,initial_rank)
     else:
-        if not hasattr(layer, 'weight'):
-            print("Skipping layer: No weight in this layer")
-            return False
-
-        W = layer.weight.data
-        X = collect_activations(model, dataloader, layer)
-
-        if  W.ndim < 2 or W.shape[1] != X.shape[0]:
-            print("Skipping layer: Invalid weight shape")
-            return False
-
-        optimal_rank = compress_layer_by_optimal_rank(
-            model, dataloader, layer, initial_rank, max_rank, allowed_loss,
-            increment=96
-        )
-    if optimal_rank == max_rank:
-        print("Can not find optimal rank within the loss tolerance")
-        return False
-    else:
+        optimal_rank = compress_linear_layer_by_optimal_rank(model, dataloader, layer, initial_rank, max_rank, allowed_loss,initial_rank)
+    
+    if optimal_rank:
         print("Layer compressed with optimal rank ", optimal_rank)
         return True
+    else:
+        print("Can not find optimal rank within the loss tolerance")
+        return False
 
-def overall_low_rank_approximation(model, dataloader, layer_names, module_tolerance):
-    """
-    Apply low-rank approximation across specified layers while keeping loss increase within allowed tolerance.
-    
-    Parameters:
-        model (nn.Module): The model to compress.
-        dataloader (DataLoader): DataLoader for the dataset used in evaluating loss.
-        layer_names (list): List of layer names to apply compression.
-        module_tolerance (dict): Dictionary specifying the allowed loss tolerance for each module type.
-        
-    Returns:
-        nn.Module: The compressed model.
-    """
+def overall_low_rank_approximation(model, dataloader):
+    layer_names = [name for name, _ in model.named_modules()]
+
     original_loss = evaluate_model_loss(model, dataloader)
     allowed_loss = original_loss
-    # Define initial and maximum ranks for each layer type
-    initial_ranks = {
-        "BertSdpaSelfAttention": 96,
-        "BertSelfOutput": 96,
-        "BertIntermediate": 96,
-        "BertOutput": 96,
-    }
-    max_ranks = {
-        "BertSdpaSelfAttention": 768,
-        "BertSelfOutput": 768,
-        "BertIntermediate": 768,
-        "BertOutput": 768,
-    }
-    
+       
     for layer_name in layer_names:
-        # Determine module type and tolerance
         layer = dict(model.named_modules())[layer_name]
-        if isinstance(layer, BertSdpaSelfAttention):
-            tol = module_tolerance["BertSdpaSelfAttention"]
-            initial_rank = initial_ranks["BertSdpaSelfAttention"]
-            max_rank = max_ranks["BertSdpaSelfAttention"]
-        elif isinstance(layer, BertSelfOutput):
-            tol = module_tolerance["BertSelfOutput"]
-            initial_rank = initial_ranks["BertSelfOutput"]
-            max_rank = max_ranks["BertSelfOutput"]
-        elif isinstance(layer, BertIntermediate):
-            tol = module_tolerance["BertIntermediate"]
-            initial_rank = initial_ranks["BertIntermediate"]
-            max_rank = max_ranks["BertIntermediate"]
-        elif isinstance(layer, BertOutput):
-            tol = module_tolerance["BertOutput"]
-            initial_rank = initial_ranks["BertOutput"]
-            max_rank = max_ranks["BertOutput"]
-        elif layer_name.endswith("embeddings") or layer_name.endswith("attention.self.key") or layer_name.endswith("attention.self.query"):
+        if isinstance(layer, (BertSdpaSelfAttention,BertSelfOutput,BertIntermediate,BertOutput)):
+            tol = tols[type(layer)]
+            initial_rank = steps[type(layer)]
+            max_rank = max_ranks[type(layer)]
+        else :
             continue
-        else: #try to compress
-            tol = 1
-            initial_rank = initial_ranks["BertOutput"]
-            max_rank = max_ranks["BertOutput"]
 
-        allowed_loss = allowed_loss * tol
+        allowed_loss = original_loss * tol
 
         # Compress the layer
         print("------------------")
@@ -310,7 +199,6 @@ def overall_low_rank_approximation(model, dataloader, layer_names, module_tolera
 
 def evaluate_model_loss(model, dataloader):
     model.eval()
-    loss_fn = torch.nn.CrossEntropyLoss()
     total_loss = 0.0
     num_batches = 0
 
@@ -348,15 +236,16 @@ def evaluate_model_accuracy(model, dataloader):
     accuracy = correct_predictions / total_predictions
     return accuracy
 
-print(torch.__version__)
-print(torch.cuda.is_available())
-print(torch.cuda.get_device_name())
+if __name__=='__main__':
+    print(torch.__version__)
+    print(torch.cuda.is_available())
+    print(torch.cuda.get_device_name())
 
-acc = evaluate_model_accuracy(model, dataloader)
-print(f"Average accuracy of the model: {acc}")
+    acc = evaluate_model_accuracy(model, dataloader)
+    print(f"Average accuracy of the model: {acc}")
 
-layer_names = [name for name, module in model.named_modules()]
-
-compressed_model = overall_low_rank_approximation(model, dataloader, layer_names, module_tolerance)
-acc = evaluate_model_accuracy(compressed_model, dataloader)
-print(f"Average accuracy of the compressed model: {acc}")
+    compressed_model = overall_low_rank_approximation(model, dataloader)
+    compressed_model.save_pretrained('prone')
+    acc = evaluate_model_accuracy(compressed_model, dataloader)
+    print(f"Average accuracy of the compressed model: {acc}")
+    model1=AutoModel.from_pretrained('prone')

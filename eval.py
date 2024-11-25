@@ -63,51 +63,51 @@ def evaluate_model(model, tokenizer, dataset_name):
 
     # mnli has two validation set
     if dataset_name == 'mnli':
-        validation_splits = ['validation_matched', 'validation_mismatched']
+        split = 'validation_matched'
     else:
-        validation_splits = ['validation']
+        split = 'validation'
 
-    for split in validation_splits:
-        print(f"Evaluating split {split}")
-        eval_dataset = encoded_dataset[split].with_format("torch")
-        eval_dataloader = DataLoader(
-            eval_dataset,
-            batch_size=1,
-            collate_fn=DataCollatorWithPadding(tokenizer, return_tensors="pt")
-        )
-        
-        model.eval()
-        predictions = []
-        labels = []
-        for batch in tqdm(eval_dataloader):
-            batch = {k: v.to(device) for k, v in batch.items()}
-            with torch.no_grad():
-                labels_batch = batch['labels']
-                outputs = model(**batch)
-                logits = outputs.logits
-                if dataset_name == 'stsb':
-                    # regression
-                    prediction = logits.squeeze().cpu().numpy()
-                    if prediction.size==1: prediction=[prediction]
-                    label = labels_batch.squeeze().cpu().numpy()
-                    if label.size==1: label=[label]
-                else:
-                    prediction = torch.argmax(logits, dim=-1).cpu().numpy()
-                    label = labels_batch.cpu().numpy()
-                predictions.extend(prediction)
-                labels.extend(label)
+    
+    print(f"Evaluating split {split}")
+    eval_dataset = encoded_dataset[split].with_format("torch")
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        batch_size=1,
+        collate_fn=DataCollatorWithPadding(tokenizer, return_tensors="pt")
+    )
+    
+    model.eval()
+    predictions = []
+    labels = []
+    for batch in tqdm(eval_dataloader):
+        batch = {k: v.to(device) for k, v in batch.items()}
+        with torch.no_grad():
+            labels_batch = batch['labels']
+            outputs = model(**batch)
+            logits = outputs.logits
+            if dataset_name == 'stsb':
+                # regression
+                prediction = logits.squeeze().cpu().numpy()
+                if prediction.size==1: prediction=[prediction]
+                label = labels_batch.squeeze().cpu().numpy()
+                if label.size==1: label=[label]
+            else:
+                prediction = torch.argmax(logits, dim=-1).cpu().numpy()
+                label = labels_batch.cpu().numpy()
+            predictions.extend(prediction)
+            labels.extend(label)
 
-        # metrics
-        metric = evaluate.load('glue', dataset_name)
-        metric_result = metric.compute(predictions=predictions, references=labels)
-        if dataset_name == 'stsb':
-            print(f"{dataset_name} ({split}) results: Pearson correlation: {metric_result['pearson']:.4f}, Spearman correlation: {metric_result['spearmanr']:.4f}")
-        elif dataset_name in ['mrpc', 'qqp']:
-            print(f"{dataset_name} ({split}) results: Accuracy: {metric_result['accuracy']:.4f}, F1 score: {metric_result['f1']:.4f}")
-        elif dataset_name == 'cola':
-            print(f"{dataset_name} ({split}) results: Matthews correlation: {metric_result['matthews_correlation']:.4f}")
-        else:
-            print(f"{dataset_name} ({split}) results: Accuracy: {metric_result['accuracy']:.4f}")
+    # metrics
+    metric = evaluate.load('glue', dataset_name)
+    metric_result = metric.compute(predictions=predictions, references=labels)
+    if dataset_name == 'stsb':
+        print(f"{dataset_name} ({split}) results: Pearson correlation: {metric_result['pearson']:.4f}, Spearman correlation: {metric_result['spearmanr']:.4f}")
+    elif dataset_name in ['mrpc', 'qqp']:
+        print(f"{dataset_name} ({split}) results: Accuracy: {metric_result['accuracy']:.4f}, F1 score: {metric_result['f1']:.4f}")
+    elif dataset_name == 'cola':
+        print(f"{dataset_name} ({split}) results: Matthews correlation: {metric_result['matthews_correlation']:.4f}")
+    else:
+        print(f"{dataset_name} ({split}) results: Accuracy: {metric_result['accuracy']:.4f}")
 
 if __name__=='__main__':
     # dataset_list = [
@@ -125,7 +125,6 @@ if __name__=='__main__':
         time_record={k:[] for k,v in time_record.items()}
         model_name=f'./models/{dataset_name}'
         model=AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
-        print(model)
         add_time_warp(model,BertForSequenceClassification.__name__)
         for name, module in model.named_modules():
             if isinstance(module, (BertSdpaSelfAttention,BertEmbeddings,BertPooler)):
